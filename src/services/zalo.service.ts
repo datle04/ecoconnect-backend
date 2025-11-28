@@ -19,26 +19,38 @@ interface IZaloUserInfo {
  */
 export const getZaloUserInfo = async (accessToken: string): Promise<Partial<IUser>> => {
   try {
-    // 1. Lấy thông tin người dùng bằng accessToken
     const url = 'https://graph.zalo.me/v2.0/me';
+    
+    // === THÊM LOG DEBUG ===
+    console.log("[ZaloService] Đang gọi Zalo API với token:", accessToken.substring(0, 10) + "...");
+    
     const response = await axios.get<IZaloUserInfo>(url, {
       params: {
         access_token: accessToken,
-        fields: 'id,name,picture', // Các trường bạn muốn lấy
+        fields: 'id,name,picture',
       },
     });
 
+    // === LOG KẾT QUẢ TRẢ VỀ ===
+    console.log("[ZaloService] Zalo Response Data:", JSON.stringify(response.data, null, 2));
+
     const { id, name, picture } = response.data;
 
-    // 2. Chuẩn hóa dữ liệu trả về theo Model của chúng ta
+    // Kiểm tra kỹ hơn
+    if (!id) {
+        console.error("[ZaloService] Lỗi: Không tìm thấy 'id' trong phản hồi Zalo!");
+        // Trả về object rỗng để controller xử lý lỗi
+        return {}; 
+    }
+
     return {
       zaloId: id,
       displayName: name,
       avatar: picture?.data?.url || '',
     };
   } catch (error: any) {
-    // Nếu token hết hạn hoặc không hợp lệ, Zalo sẽ trả về lỗi 401
-    console.error('Lỗi khi lấy Zalo User Info (Token có thể không hợp lệ):', error.response?.data || error.message);
-    throw new Error('Lỗi khi xác thực với Zalo (Token không hợp lệ)');
+    // Log lỗi chi tiết nếu axios thất bại (ví dụ: 401, 403)
+    console.error('[ZaloService] Lỗi gọi API Zalo:', error.response?.data || error.message);
+    throw new Error('Lỗi khi xác thực với Zalo');
   }
 };
