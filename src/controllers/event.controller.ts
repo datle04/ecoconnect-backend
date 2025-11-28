@@ -44,20 +44,45 @@ export const createEvent = async (req: Request, res: Response) => {
 };
 
 /**
- * Lấy danh sách tất cả Event (đã được duyệt)
- * GET /api/events
- * Yêu cầu: Công khai (Không cần đăng nhập)
+ * Lấy danh sách Event (Có phân trang & Filter)
+ * GET /api/events?page=1&limit=10&status=APPROVED
  */
 export const getAllEvents = async (req: Request, res: Response) => {
   try {
-    // Chỉ lấy các event đã được 'APPROVED' để hiển thị công khai
-    const events = await Event.find({ status: 'APPROVED' })
-      .populate('createdBy', 'displayName avatar') // Lấy thông tin người tạo
-      .sort({ startTime: 1 }); // Sắp xếp theo event diễn ra sớm nhất
+    // 1. Lấy tham số từ URL (Query Params)
+    const page = parseInt(req.query.page as string) || 1; // Trang mặc định là 1
+    const limit = parseInt(req.query.limit as string) || 10; // Mặc định lấy 10 cái
+    const status = req.query.status || 'APPROVED'; // Mặc định chỉ lấy Approved
 
-    res.status(200).json(events);
+    const skip = (page - 1) * limit; // Tính số lượng cần bỏ qua
+
+    // 2. Tạo bộ lọc
+    const filter: any = { status }; 
+    // (Nếu bạn muốn search theo tên/địa điểm, thêm logic regex vào đây)
+
+    // 3. Thực hiện query (Song song: Lấy dữ liệu + Đếm tổng số)
+    const [events, total] = await Promise.all([
+      Event.find(filter)
+        .populate('createdBy', 'displayName avatar')
+        .sort({ startTime: 1 }) // Sắp xếp ngày gần nhất
+        .skip(skip)
+        .limit(limit),
+      Event.countDocuments(filter)
+    ]);
+
+    // 4. Trả về cấu trúc dữ liệu chuẩn cho phân trang
+    res.status(200).json({
+      data: events,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+
   } catch (error: any) {
-    res.status(500).json({ message: 'Lỗi server khi lấy events', error: error.message });
+    res.status(500).json({ message: 'Lỗi server', error: error.message });
   }
 };
 
