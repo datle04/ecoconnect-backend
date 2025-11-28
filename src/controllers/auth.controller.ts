@@ -21,43 +21,49 @@ const generateToken = (userId: string) => {
  */
 export const loginWithZalo = async (req: Request, res: Response) => {
   try {
-    // 1. Lấy accessToken từ body (thay vì authCode)
     const { accessToken } = req.body;
-    console.log(accessToken);
-    
-    if (!accessToken) {
-      return res.status(400).json({ message: 'accessToken là bắt buộc' });
-    }
+    console.log("1. [DEBUG] Đã nhận AccessToken:", accessToken.substring(0, 10) + "...");
 
-    // 2. Gọi service để lấy thông tin Zalo user (bằng accessToken)
+    // BƯỚC KIỂM TRA 1: Gọi Zalo API
+    console.log("2. [DEBUG] Đang gọi getZaloUserInfo...");
     const zaloUserInfo = await getZaloUserInfo(accessToken);
+    console.log("3. [DEBUG] Đã lấy thông tin Zalo:", zaloUserInfo.displayName);
 
     if (!zaloUserInfo.zaloId) {
-      return res.status(500).json({ message: 'Không thể lấy thông tin Zalo ID' });
+        console.log("!!! [ERROR] Không có Zalo ID");
+        return res.status(500).json({ message: 'Không thể lấy thông tin Zalo ID' });
     }
 
-    // 3. Tìm User trong DB bằng zaloId
+    // BƯỚC KIỂM TRA 2: Gọi Database
+    console.log("4. [DEBUG] Đang tìm User trong DB...");
     let user = await User.findOne({ zaloId: zaloUserInfo.zaloId });
+    console.log("5. [DEBUG] Kết quả tìm User:", user ? "Đã tồn tại" : "Chưa tồn tại");
 
     if (user) {
-      // 4a. Nếu User tồn tại -> Đăng nhập
       user.displayName = zaloUserInfo.displayName || user.displayName;
       user.avatar = zaloUserInfo.avatar || user.avatar;
       await user.save();
+      console.log("6. [DEBUG] Đã cập nhật User");
     } else {
-      // 4b. Nếu User không tồn tại -> Đăng ký
+      console.log("6. [DEBUG] Đang tạo User mới...");
       user = new User({
         zaloId: zaloUserInfo.zaloId,
         displayName: zaloUserInfo.displayName,
         avatar: zaloUserInfo.avatar,
       });
       await user.save();
+      console.log("7. [DEBUG] Đã lưu User mới");
     }
 
-    // 5. Tạo JWT token của hệ thống EcoConnect
+    // BƯỚC KIỂM TRA 3: Tạo JWT
+    console.log("8. [DEBUG] Đang tạo JWT Token...");
+    // Kiểm tra xem JWT_SECRET có tồn tại không
+    if (!process.env.JWT_SECRET) {
+        throw new Error("Thiếu biến môi trường JWT_SECRET!");
+    }
     const token = generateToken(user._id as string);
+    console.log("9. [DEBUG] Tạo Token thành công");
 
-    // 6. Trả về token và thông tin user cho Zalo Mini App
     res.status(200).json({
       token,
       user: {
@@ -67,8 +73,10 @@ export const loginWithZalo = async (req: Request, res: Response) => {
         role: user.role,
       },
     });
+    console.log("10. [DEBUG] Đã gửi phản hồi về Frontend -> XONG");
+
   } catch (error: any) {
-    console.error(error);
+    console.error("!!! [CRITICAL ERROR] Lỗi xảy ra tại Backend:", error);
     res.status(500).json({ message: 'Lỗi server nội bộ', error: error.message });
   }
 };
